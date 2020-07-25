@@ -18,7 +18,7 @@ import sys
 
 def SearchPath(exe_name):
   """Find an executable (.exe, .bat, whatever) in the system path."""
-  for dir in os.environ['path'].split(';'):
+  for dir in os.environ['PATH'].split(';'):
     path = os.path.join(dir, exe_name)
     if os.path.exists(path):
       return path
@@ -98,13 +98,13 @@ def GetLineCount(line_counts, filename):
 
 
 def main():
-  ninja_path = SearchPath('ninja.exe')
-
+  ninja_path = SearchPath('ninja')
+  ninja_path = '/home/vsrinivas/bin/ninja'
   try:
     log_file = '.ninja_log'
     print('Reading .ninja_log file.', file=sys.stderr)
     with open(log_file, 'r') as log:
-      entries = ReadTargets(log, False)
+      entries = ReadTargets(log, True)
       # Create a dictionary of build-times by target
       print('Creating durations database.', file=sys.stderr)
       durations = {}
@@ -138,33 +138,38 @@ def main():
       active_obj = None
 
   print('Reading build commands.', file=sys.stderr)
-  command = '%s -t commands chrome' % ninja_path
+  command = '%s -t commands  kernel-x64-clang/obj/kernel/zircon.bin' % ninja_path
+  #command = '%s -t commands  default' % ninja_path
   command_lines = os.popen(command).readlines()
 
   print('Generating .csv file.', file=sys.stderr)
   print('name,t_ms,num_dependent_lines,num_lines,num_deps')
   missing_count = 0
   for line in command_lines:
-    if line.count('clang-cl.exe') > 0:
+    if line.count('clang++') > 0 and line.count('use-ld') == 0:
       parts = line.split(' ')
-      obj_name = parts[-2][3:]
-      source_name = parts[-3].replace('/', '\\')
+      obj_name = parts[parts.index('-o') + 1]
+      #source_name = parts[-3].replace('/', '\\')
+      # XXX
+      source_name = parts[-1].replace('\n', '')
       active_deps = []
       if obj_name in deps:
         active_deps = deps[obj_name]
       line_count = GetLineCount(line_counts, source_name)
       total_dep_line_count = 0
       for dep in active_deps:
+        #print(dep)
         dep_line_count = GetLineCount(line_counts, dep)
         total_dep_line_count += dep_line_count
       if obj_name in durations:
         print('%s,%d,%d,%d,%d' % (source_name, int(durations[obj_name] * 1000), total_dep_line_count, line_count, len(active_deps)))
       else:
-        missing_count += 1
-        if missing_count < 5:
-          print('Missing durations for %s' % obj_name, file=sys.stderr)
-        elif missing_count == 5:
-          print('...', file=sys.stderr)
+        if obj_name != '': 
+          missing_count += 1
+#        if missing_count < 5:
+#          print('Missing durations for %s' % obj_name, file=sys.stderr)
+#        elif missing_count == 5:
+#          print('...', file=sys.stderr)
   if missing_count > 0:
     print('%d durations were missing. Did you do a full build of Chrome?' % missing_count, file=sys.stderr)
     print('You must do a clean build, or modify the ReadTargets call to pass True for show_all.', file=sys.stderr)
